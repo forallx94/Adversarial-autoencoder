@@ -17,7 +17,7 @@ def setup_lstm_ae_model(train_X):
 	model.add(LSTM(
 			units=train_X.shape[2],
 			return_sequences=True))
-	model.compile(loss='mse', optimizer='adam', metrics=['mse'])
+	model.compile(loss='mse', optimizer='adam', metrics=['accuracy'])
 	return model
 
 

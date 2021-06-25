@@ -27,15 +27,18 @@ if os.path.isfile(model_path):
 	model = load_model(model_path, custom_objects={'rmse': rmse})
 
 	# make adversarial example
-	adv_X, _ = fgsm(X =test_X, Y=test_X, model=model ,loss_fn = rmse , epsilon=0.2)
+	adv_X_fgsm, _ = fgsm(X =test_X, Y=test_X, model=model ,loss_fn = rmse , epsilon=0.2)
 
 	# make bim adversarial example
-	# adv_X, _ = bim(X =test_X, Y=test_X, model=model ,loss_fn = rmse , epsilon=0.2, alpha=0.001, I=200)
-
+	adv_X_bim, _ = bim(X =test_X, Y=test_X, model=model ,loss_fn = rmse , epsilon=0.2, alpha=0.001, I=200)
 
 	# make a adv prediction
-	adv_Xhat = model.predict(adv_X)
-	adv_Xhat = adv_Xhat.reshape((test_X.shape[0], test_X.shape[2]))
+	adv_Xhat_fgsm = model.predict(adv_X_fgsm)
+	adv_Xhat_fgsm = adv_Xhat_fgsm.reshape((test_X.shape[0], test_X.shape[2]))
+
+	# make a adv prediction
+	adv_Xhat_bim = model.predict(adv_X_bim)
+	adv_Xhat_bim = adv_Xhat_bim.reshape((test_X.shape[0], test_X.shape[2]))
 
 	# make a prediction
 	Xhat = model.predict(test_X)
@@ -44,8 +47,10 @@ if os.path.isfile(model_path):
 
 	rmse = np.sqrt(mean_squared_error(test_X, Xhat))
 	print('Test RMSE: %.3f' % rmse)
-	rmse = np.sqrt(mean_squared_error(test_X, adv_Xhat))
-	print('Test adv RMSE: %.3f' % rmse)
+	rmse = np.sqrt(mean_squared_error(test_X, adv_Xhat_fgsm))
+	print('Test adv fgsm RMSE: %.3f' % rmse)
+	rmse = np.sqrt(mean_squared_error(test_X, adv_Xhat_bim))
+	print('Test adv bim RMSE: %.3f' % rmse)
 
 
 	# # make a adv prediction
