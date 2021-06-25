@@ -6,7 +6,7 @@ import seaborn as sns # used for plot interactive graph.
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import mean_squared_error
 
-from utils import power_data, fgsm, rmse, bim
+from utils import microsoft_data, fgsm, rmse, bim
 
 ## for Deep-learing:
 import tensorflow.keras.backend as K
@@ -17,10 +17,10 @@ from tensorflow.keras.models import load_model
 ## Just open the zip file and grab the file 'household_power_consumption.txt' put it in the directory
 ## that you would like to run the code.
 
-model_path = '../Trained models/Power_regression_LSTM.h5'
+model_path = '../Trained models/Microsoft_regression_LSTM.h5'
 
 
-train_X, train_y, test_X, test_y , scaler = power_data()
+train_X, train_y, test_X, test_y , scaler = microsoft_data()
 
 
 if os.path.isfile(model_path):

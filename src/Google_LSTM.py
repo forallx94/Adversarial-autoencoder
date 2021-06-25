@@ -19,6 +19,7 @@ model_path = '../Trained models/Google_regression_LSTM.h5'
 train_X, train_y, test_X, test_y , scaler = google_data()
 
 model = setup_lstm_ae_model(train_X)
+print(model.summary())
 
 # fit the network
 history = model.fit(train_X, train_X, epochs=200, batch_size=32, validation_split=0.05, verbose=2,

@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt # this is used for the plot the graph
 import seaborn as sns # used for plot interactive graph.
 from sklearn.metrics import mean_squared_error
 
-from utils import power_data, rmse
+from utils import microsoft_data, rmse
 from model import setup_lstm_ae_model
 
 import tensorflow.keras.backend as K
@@ -18,10 +18,10 @@ from tensorflow.keras.layers import LSTM, Dense, InputLayer, Activation, Dropout
 ## that you would like to run the code.
 
 # define path to save model
-model_path = '../Trained models/Power_regression_LSTM.h5'
+model_path = '../Trained models/Microsoft_regression_LSTM.h5'
 
 # import data
-train_X, train_y, test_X, test_y , scaler = power_data()
+train_X, train_y, test_X, test_y , scaler = microsoft_data()
 
 model = setup_lstm_ae_model(train_X)
 print(model.summary())

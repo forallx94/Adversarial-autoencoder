@@ -103,7 +103,7 @@ def window_slide(input_data, window_size):
     return np.array(X), np.array(y)
 
 
-def google_data():
+def google_data(window_size=60):
     # import data
     stock_train = pd.read_csv("../Dataset/Google dataset/Google_train.csv",dtype={'Close': 'float64', 'Volume': 'int64','Open': 'float64','High': 'float64', 'Low': 'float64'})
     stock_test = pd.read_csv("../Dataset/Google dataset/Google_train.csv",dtype={'Close': 'float64', 'Volume': 'int64','Open': 'float64','High': 'float64', 'Low': 'float64'})
@@ -131,16 +131,162 @@ def google_data():
 
     scaler = [sc, cs]
 
-    # data preparation
-    lookback = 60
+    train_X, train_y = window_slide(train_data, window_size)
+    test_X, test_y = window_slide(test_data, window_size)
 
-    train_X, train_y = window_slide(train_data, lookback)
-    test_X, test_y = window_slide(test_data, lookback)
-
-    train_X = train_X.reshape(train_X.shape[0], lookback, 2)
-    test_X = test_X.reshape(test_X.shape[0],lookback, 2)
+    train_X = train_X.reshape(train_X.shape[0], window_size, 2)
+    test_X = test_X.reshape(test_X.shape[0],window_size, 2)
 
     return train_X, train_y, test_X, test_y , scaler
+
+
+def microsoft_data(window_size=50):
+    telemetry = pd.read_csv('../Dataset/Microsoft Azure/PdM_telemetry.csv')
+    errors = pd.read_csv('../Dataset/Microsoft Azure/PdM_errors.csv')
+    maint = pd.read_csv('../Dataset/Microsoft Azure//PdM_maint.csv')
+    failures = pd.read_csv('../Dataset/Microsoft Azure//PdM_failures.csv')
+    machines = pd.read_csv('../Dataset/Microsoft Azure//PdM_machines.csv')
+
+    telemetry['datetime'] = pd.to_datetime(telemetry['datetime'], format="%Y-%m-%d %H:%M:%S")
+
+    errors['datetime'] = pd.to_datetime(errors['datetime'],format = '%Y-%m-%d %H:%M:%S')
+    errors['errorID'] = errors['errorID'].astype('category')
+
+    maint['datetime'] = pd.to_datetime(maint['datetime'], format='%Y-%m-%d %H:%M:%S')
+    maint['comp'] = maint['comp'].astype('category')
+
+    machines['model'] = machines['model'].astype('category')
+
+    failures['datetime'] = pd.to_datetime(failures['datetime'], format="%Y-%m-%d %H:%M:%S")
+    failures['failure'] = failures['failure'].astype('category')
+
+    # create a column for each error type
+    # error 별 column 생성
+    error_count = pd.get_dummies(errors.set_index('datetime')).reset_index()
+    error_count.columns = ['datetime', 'machineID', 'error1', 'error2', 'error3', 'error4', 'error5']
+    # 같은 시간으로 통합
+    error_count = error_count.groupby(['machineID','datetime']).sum().reset_index()
+    # telemetry 에 통합
+    error_count = telemetry[['datetime', 'machineID']].merge(error_count, on=['machineID', 'datetime'], how='left').fillna(0.0)
+    error_count = error_count.dropna()
+
+    # create a column for each error type
+    # 각 부품별로 생성후 column 명 설정
+    comp_rep = pd.get_dummies(maint.set_index('datetime')).reset_index()
+    comp_rep.columns = ['datetime', 'machineID', 'comp1', 'comp2', 'comp3', 'comp4']
+
+    # combine repairs for a given machine in a given hour
+    # 기계와 시간별로 교체 부품 정리
+    comp_rep = comp_rep.groupby(['machineID', 'datetime']).sum().reset_index()
+
+    # add timepoints where no components were replaced
+    # telemetry 데이터에 데이터 결합
+    comp_rep = telemetry[['datetime', 'machineID']].merge(comp_rep,
+                                                        on=['datetime', 'machineID'],
+                                                        how='outer').fillna(0).sort_values(by=['machineID', 'datetime'])
+
+    components = ['comp1', 'comp2', 'comp3', 'comp4']
+    for comp in components:
+        # convert indicator to most recent date of component change
+        comp_rep.loc[comp_rep[comp] < 1, comp] = None # 0.0인 위치를 모두 None 으로 변경
+        comp_rep.loc[-comp_rep[comp].isnull(), comp] = comp_rep.loc[-comp_rep[comp].isnull(), 'datetime']
+        # -comp_rep[comp].isnull() comp_req 의 comp columns 에서 None 이 아닌 부분을 선택(즉 해당 부품의 교체가 발생된 날짜 선택)
+        # 해당 부분의 내용을 시간으로 변경
+        
+        # forward-fill the most-recent date of component change
+        # 나머지 빈 부분을 모두 해당 시간으로 교체 (즉 부품 교체일로 변경 날짜)
+        comp_rep[comp] = comp_rep[comp].fillna(method='ffill')
+
+    # remove dates in 2014 (may have NaN or future component change dates)    
+    # 2014년 이상의 데이터만 선택
+    comp_rep = comp_rep.loc[comp_rep['datetime'] > pd.to_datetime('2015-01-01')]
+
+    # replace dates of most recent component change with days since most recent component change
+    # 각 comp 내용을 부품 교체일 부터 얼마나 지났는지로 변경
+    for comp in components:
+        comp_rep[comp] = (comp_rep['datetime'] - comp_rep[comp]) / np.timedelta64(1, 'D')
+
+    # 통합 과정
+    final_feat = telemetry.merge(error_count, on=['datetime', 'machineID'], how='left')
+    final_feat = final_feat.merge(comp_rep, on=['datetime', 'machineID'], how='left')
+    final_feat = final_feat.merge(machines, on=['machineID'], how='left')
+
+    # failure 결합
+    labeled_features = final_feat.merge(failures, on=['datetime', 'machineID'], how='left')
+    # fillna 가 str일 경우 작동하지 않는 문제 발견 하여 comp 의 마지막 단어를 추출하여 fillna 진행후 comp를 다시 붙이는 방식으로 해결
+    labeled_features.failure = 'comp' + labeled_features.failure.str[-1].fillna(method='bfill', limit=23) # 앞선 23칸을 failure 로 설정
+    labeled_features.failure = labeled_features.failure.fillna('none') # 나머지를 none 으로 설정
+
+    # pick the feature columns 
+    scaler_cols = ['machineID', 'volt', 'rotate', 'pressure', 'vibration',
+        'error1', 'error2', 'error3', 'error4', 'error5', 'comp1', 'comp2',
+        'comp3', 'comp4', 'age']
+
+    scaler_dict = {}
+    for col_ in scaler_cols:
+        scaler = MinMaxScaler()
+        labeled_features[[col_]] = scaler.fit_transform(labeled_features[[col_]])
+        scaler_dict[col_] = scaler
+
+    # make test and training splits
+    last_train_date, first_test_date = [pd.to_datetime('2015-07-31 01:00:00'), pd.to_datetime('2015-08-01 01:00:00')]
+
+    train_y = pd.get_dummies(labeled_features.loc[labeled_features['datetime'] < last_train_date, ['machineID','failure']])
+    train_X = pd.get_dummies(labeled_features.loc[labeled_features['datetime'] < last_train_date].drop(['failure'], 1))
+
+    test_y = pd.get_dummies(labeled_features.loc[labeled_features['datetime'] > first_test_date, ['machineID','failure']])
+    test_X = pd.get_dummies(labeled_features.loc[labeled_features['datetime'] > first_test_date].drop(['failure'], 1))
+
+    # function to reshape features into (samples, time steps, features) 
+    def gen_sequence(id_df, seq_length, seq_cols):
+        """ Only sequences that meet the window-length are considered, no padding is used. This means for testing
+        we need to drop those which are below the window-length. An alternative would be to pad sequences so that
+        we can use shorter ones """
+        data_array = id_df[seq_cols].values
+        num_elements = data_array.shape[0]
+        for start, stop in zip(range(0, num_elements-seq_length), range(seq_length, num_elements)):
+            yield data_array[start:stop, :]
+
+    # function to generate labels
+    def gen_labels(id_df, seq_length, label):
+        data_array = id_df[label].values
+        num_elements = data_array.shape[0]
+        return data_array[seq_length:num_elements, :]
+
+    # pick the feature columns 
+    sequence_cols = ['machineID', 'volt', 'rotate', 'pressure', 'vibration',
+        'error1', 'error2', 'error3', 'error4', 'error5', 'comp1', 'comp2',
+        'comp3', 'comp4', 'age', 'model_model1', 'model_model2', 'model_model3',
+        'model_model4']
+
+    # generator for the sequences
+    seq_gen = (list(gen_sequence(train_X[train_X['machineID']==id], window_size, sequence_cols)) 
+            for id in train_X['machineID'].unique())
+
+    # generate sequences and convert to numpy array
+    train_X = np.concatenate(list(seq_gen)).astype(np.float32)
+
+    # generate labels
+    label_gen = [gen_labels(train_y[train_y['machineID']==id], window_size, ['failure_comp1', 'failure_comp2', 
+                                                                                'failure_comp3','failure_comp4', 'failure_none']) 
+                for id in train_y['machineID'].unique()]
+    train_y = np.concatenate(label_gen).astype(np.float32)
+
+    # generator for the sequences
+    seq_gen = (list(gen_sequence(test_X[test_X['machineID']==id], window_size, sequence_cols)) 
+            for id in test_X['machineID'].unique())
+
+    # generate sequences and convert to numpy array
+    test_X = np.concatenate(list(seq_gen)).astype(np.float32)
+
+    # generate labels
+    label_gen = [gen_labels(test_y[test_y['machineID']==id], window_size, ['failure_comp1', 'failure_comp2', 
+                                                                                'failure_comp3','failure_comp4', 'failure_none']) 
+                for id in test_y['machineID'].unique()]
+    test_y = np.concatenate(label_gen).astype(np.float32)
+
+    return train_X, train_y, test_X, test_y , scaler
+
 
 def compute_gradient(model_fn, loss_fn, x, y, targeted):
     """
