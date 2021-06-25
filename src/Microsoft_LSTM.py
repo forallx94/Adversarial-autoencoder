@@ -27,7 +27,7 @@ model = setup_lstm_ae_model(train_X)
 print(model.summary())
 
 # fit network
-history = model.fit(train_X, train_X,  epochs=200, batch_size=14, validation_data=(test_X, test_X), verbose=2,
+history = model.fit(train_X, train_X,  epochs=200, batch_size=1024, validation_data=(test_X, test_X), verbose=2,
                     callbacks = [tf.keras.callbacks.EarlyStopping(monitor='val_mse', patience=2, verbose=0, mode='auto'), 
                                 tf.keras.callbacks.ModelCheckpoint(model_path,monitor='val_mse', save_best_only=True, mode='min', verbose=0)])
 
