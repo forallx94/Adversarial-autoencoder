@@ -1,5 +1,3 @@
-PdM_errors.csv
-PdM_failures.csv
-PdM_machines.csv
-PdM_maint.csv
-PdM_telemetry.csv
+*
+!.gitignore
+README.md

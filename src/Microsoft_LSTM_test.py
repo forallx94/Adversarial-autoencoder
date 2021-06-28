@@ -4,9 +4,9 @@ import pandas as pd # data processing, CSV file I/O (e.g. pd.read_csv), data man
 import matplotlib.pyplot as plt # this is used for the plot the graph
 import seaborn as sns # used for plot interactive graph.
 from sklearn.preprocessing import MinMaxScaler
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_absolute_error, confusion_matrix, accuracy_score, f1_score
 
-from utils import microsoft_data, fgsm, rmse, bim
+from utils import microsoft_ml_data, microsoft_ws_data, fgsm, rmse, bim
 
 ## for Deep-learing:
 import tensorflow.keras.backend as K
@@ -20,8 +20,36 @@ from tensorflow.keras.models import load_model
 model_path = '../Trained models/Microsoft_regression_LSTM.h5'
 
 
-train_X, train_y, test_X, test_y , scaler = microsoft_data()
+train_X, train_y, test_X, test_y , scaler = microsoft_ml_data()
+column_name = train_X.columns
+train_X = train_X.values.reshape(-1, 1, 27)
+test_X  = test_X.values.reshape(-1, 1, 27)
 
+
+def compare_result(x,xhat,name=''):
+	scored_train = pd.DataFrame()
+	scored_train['Loss_mae'] = np.mean(np.abs(xhat-x), axis = 1)
+	scored_train['Threshold'] = TH
+	scored_train['Anomaly'] = scored_train['Loss_mae'] > scored_train['Threshold']
+	anomalies = scored_train[scored_train['Anomaly'] == True]
+	scored_train['True'] = test_y != 4
+
+	f, (ax1) = plt.subplots(figsize=(16, 4))
+	ax1.plot(scored_train.index, scored_train.Loss_mae, label='Loss(MAE)');
+	ax1.plot(scored_train.index, scored_train.Threshold, label='Threshold')
+	g = sns.scatterplot(x=anomalies.index , y=anomalies.Loss_mae, label='anomaly', color='red')
+	g.set(xlim = (0, len(scored_train.index)))
+	plt.title('Anomalies')
+	plt.xlabel('Data points')
+	plt.ylabel('Loss (MAE)')
+	plt.legend()
+	plt.savefig(f'../plot/microsoft_{name}_mae.png')
+
+	scor_ = accuracy_score(scored_train['True'], scored_train['Anomaly'])
+	f1_ = f1_score(scored_train['True'], scored_train['Anomaly'])
+
+	print(f'acc {name} : {scor_} \n f1 {name} : {f1_}')
+	print(confusion_matrix(scored_train['True'], scored_train['Anomaly']))
 
 if os.path.isfile(model_path):
 	model = load_model(model_path, custom_objects={'rmse': rmse})
@@ -42,33 +70,35 @@ if os.path.isfile(model_path):
 
 	# make a prediction
 	Xhat = model.predict(test_X)
-	Xhat = Xhat.reshape((test_X.shape[0], test_X.shape[2]))
+	Xhat = Xhat.reshape((Xhat.shape[0], Xhat.shape[2]))
 	test_X = test_X.reshape((test_X.shape[0], test_X.shape[2]))
+	adv_X_fgsm = adv_X_fgsm.reshape((adv_X_fgsm.shape[0], adv_X_fgsm.shape[2]))
+	adv_X_bim = adv_X_bim.reshape((adv_X_bim.shape[0], adv_X_bim.shape[2]))
 
-	rmse = np.sqrt(mean_squared_error(test_X, Xhat))
-	print('Test RMSE: %.3f' % rmse)
-	rmse = np.sqrt(mean_squared_error(test_X, adv_Xhat_fgsm))
-	print('Test adv fgsm RMSE: %.3f' % rmse)
-	rmse = np.sqrt(mean_squared_error(test_X, adv_Xhat_bim))
-	print('Test adv bim RMSE: %.3f' % rmse)
+	# invert scaling for forecast
+	inv_X = test_X.copy()
+	inv_Xhat = Xhat.copy()
+	inv_adv_X_fgsm = adv_X_fgsm.copy()
+	inv_adv_X_bim = adv_X_bim.copy()
+	inv_adv_Xhat_fgsm = adv_Xhat_fgsm.copy()
+	inv_adv_Xhat_bim = adv_Xhat_bim.copy()
+	for loc_,col_ in enumerate(column_name):
+		inv_X[:,loc_:loc_+1] = scaler[col_].inverse_transform(test_X[:,loc_:loc_+1])
+		inv_Xhat[:,loc_:loc_+1] = scaler[col_].inverse_transform(Xhat[:,loc_:loc_+1])
+		inv_adv_X_fgsm[:,loc_:loc_+1] = scaler[col_].inverse_transform(adv_X_fgsm[:,loc_:loc_+1])
+		inv_adv_X_bim[:,loc_:loc_+1] =scaler[col_].inverse_transform(adv_X_bim[:,loc_:loc_+1])
+		inv_adv_Xhat_fgsm[:,loc_:loc_+1] = scaler[col_].inverse_transform(adv_Xhat_fgsm[:,loc_:loc_+1])
+		inv_adv_Xhat_bim[:,loc_:loc_+1] = scaler[col_].inverse_transform(adv_Xhat_bim[:,loc_:loc_+1])
 
+	mae = mean_absolute_error(inv_X, inv_Xhat)
+	print('Test MAE: %.3f' % mae)
+	mae = mean_absolute_error(inv_adv_X_fgsm, inv_adv_Xhat_fgsm)
+	print('Test adv fgsm MAE: %.3f' % mae)
+	mae = mean_absolute_error(inv_adv_X_bim, inv_adv_Xhat_bim)
+	print('Test adv bim MAE: %.3f' % mae)
 
-	# # calculate RMSE
-	# rmse = np.sqrt(mean_squared_error(inv_y, inv_yhat))
-	# print('Test RMSE: %.3f' % rmse)
-	# # calculate adv RMSE
-	# rmse = np.sqrt(mean_squared_error(inv_y, inv_adv_yhat))
-	# print('Test adv RMSE: %.3f' % rmse)
+	TH = 10.0
 
-	# ## time steps, every step is one hour (you can easily convert the time step to the actual time index)
-	# ## for a demonstration purpose, I only compare the predictions in 200 hours.
-
-	# fig_verify = plt.figure(figsize=(100, 50))
-	# aa=[x for x in range(200)]
-	# plt.plot(aa, inv_y[:200], marker='.', label="actual")
-	# plt.plot(aa, inv_yhat[:200], 'r', label="prediction")
-	# plt.plot(aa, inv_adv_yhat[:200], 'g', label="adv prediction")
-	# plt.ylabel('Global_active_power', size=15)
-	# plt.xlabel('Time step', size=15)
-	# plt.legend(fontsize=15)
-	# plt.show()
+	compare_result(inv_X,inv_Xhat,name='')
+	compare_result(inv_adv_X_fgsm,inv_adv_Xhat_fgsm,name='fgsm')
+	compare_result(inv_adv_X_bim,inv_adv_Xhat_bim,name='bim')
