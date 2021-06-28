@@ -6,7 +6,7 @@ import seaborn as sns # used for plot interactive graph.
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import mean_absolute_error, confusion_matrix, accuracy_score, f1_score
 
-from utils import microsoft_ml_data, microsoft_ws_data, fgsm, rmse, bim
+from utils import microsoft_ml_data, microsoft_ws_data, fgsm, mae, bim
 
 ## for Deep-learing:
 import tensorflow.keras.backend as K
@@ -52,13 +52,13 @@ def compare_result(x,xhat,name=''):
 	print(confusion_matrix(scored_train['True'], scored_train['Anomaly']))
 
 if os.path.isfile(model_path):
-	model = load_model(model_path, custom_objects={'rmse': rmse})
+	model = load_model(model_path, custom_objects={'mae': mae})
 
 	# make adversarial example
-	adv_X_fgsm, _ = fgsm(X =test_X, Y=test_X, model=model ,loss_fn = rmse , epsilon=0.2)
+	adv_X_fgsm, _ = fgsm(X =test_X, Y=test_X, model=model ,loss_fn = mae , epsilon=0.2)
 
 	# make bim adversarial example
-	adv_X_bim, _ = bim(X =test_X, Y=test_X, model=model ,loss_fn = rmse , epsilon=0.2, alpha=0.001, I=200)
+	adv_X_bim, _ = bim(X =test_X, Y=test_X, model=model ,loss_fn = mae , epsilon=0.2, alpha=0.001, I=200)
 
 	# make a adv prediction
 	adv_Xhat_fgsm = model.predict(adv_X_fgsm)

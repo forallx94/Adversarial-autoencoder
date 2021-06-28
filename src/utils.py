@@ -11,6 +11,9 @@ import tensorflow.keras.backend as K
 def rmse(y_true, y_pred):
     return K.sqrt(K.mean(K.square(y_pred - y_true), axis=-1))
 
+def mae(y_true, y_pred):
+    return K.mean(K.abs(y_pred - y_true), axis=-1)
+
 def power_data():
     df = pd.read_csv('../Dataset/household_power_consumption.txt', sep=';',
                  parse_dates={'dt' : ['Date', 'Time']}, infer_datetime_format=True,
